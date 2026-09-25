@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cahier de tests de non-régression</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f6f7f9;--card:#fff;--tx:#1c2430;--mut:#6b7686;--bd:#d9dee5;--ac:#2f6fed;--ok:#1a8f4c;--ko:#c93636;--na:#8a93a0}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181d;--card:#1e232a;--tx:#e6e9ee;--mut:#98a2b0;--bd:#333b46;--ac:#6b9bff;--ok:#43c47a;--ko:#ff6b6b;--na:#8a93a0}}
+:root[data-theme="dark"]{--bg:#15181d;--card:#1e232a;--tx:#e6e9ee;--mut:#98a2b0;--bd:#333b46;--ac:#6b9bff;--ok:#43c47a;--ko:#ff6b6b;--na:#8a93a0}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:920px;margin:0 auto;padding:20px 16px 90px}
+h1{font-size:22px;margin:0 0 4px}
+.sub{color:var(--mut);margin:0 0 18px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+label{display:block;font-size:12px;color:var(--mut);margin-bottom:3px}
+input,select,textarea{width:100%;font:inherit;color:var(--tx);background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:8px}
+textarea{resize:vertical;min-height:38px}
+.test{display:grid;grid-template-columns:1fr;gap:8px;border-top:1px solid var(--bd);padding:12px 0}
+.test:first-of-type{border-top:0}
+.t{font-weight:600}.t small{display:block;font-weight:400;color:var(--mut)}
+.row{display:grid;grid-template-columns:130px 1fr;gap:8px}
+select.OK{border-color:var(--ok);color:var(--ok)}select.KO{border-color:var(--ko);color:var(--ko)}select.NA{border-color:var(--na)}
+.bar{position:sticky;bottom:0;background:var(--card);border-top:1px solid var(--bd);padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap}
+button{font:inherit;border:1px solid var(--bd);background:var(--bg);color:var(--tx);border-radius:8px;padding:9px 14px;cursor:pointer}
+button.p{background:var(--ac);border-color:var(--ac);color:#fff;font-weight:600}
+#sum{font-weight:600}
+.msg{font-size:13px;color:var(--mut);width:100%;text-align:center}
+</style>
+</head>
+<body>
+<main>
+<h1>Cahier de tests de non-régression</h1>
+<p class="sub">Mises à jour KB Windows et pilotes – poste témoin Windows 11</p>
+
+<div class="card"><div class="grid">
+<div><label>Client</label><input id="client" value="FROGGY STYLE"></div>
+<div><label>Testeur</label><input id="testeur" placeholder="Nom du technicien"></div>
+<div><label>Date</label><input id="date" type="date"></div>
+<div><label>Poste / modèle</label><input id="poste" placeholder="Poste témoin (VM Windows 11)"></div>
+<div><label>KB Windows testée(s)</label><input id="kb" placeholder="ex. KB5xxxxxx"></div>
+<div><label>Pilote(s) / version(s)</label><input id="pil" placeholder="ex. BIOS 1.x, Jabra Direct x.x"></div>
+<div><label>Groupe WSUS ciblé</label><select id="wsus"><option value="">—</option><option>Postes-Pilotes</option><option>Postes-Production</option><option>Hors WSUS (poste témoin)</option></select></div>
+<div><label>Approuvé sur WSUS le</label><input id="wsusdate" type="date"></div>
+</div></div>
+
+<div class="card" id="tests"></div>
+
+<div class="card">
+<label>Décision</label>
+<select id="dec"><option value="">À décider</option><option>GO – déploiement pilote autorisé</option><option>NO-GO – retour arrière / mise en attente</option></select>
+<label style="margin-top:10px">Observations générales</label>
+<textarea id="obs" placeholder="Incidents constatés, actions à prévoir…"></textarea>
+</div>
+</main>
+
+<div class="bar">
+<span id="sum"></span>
+<button id="rst">Réinitialiser</button>
+<button class="p" id="pdf">Générer le rapport PDF</button>
+<div class="msg" id="msg"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script>
+const TESTS=[
+["Windows","Démarrage, ouverture de session, mise en veille et reprise","Aucune erreur"],
+["Réseau","Wi-Fi / Ethernet, accès Internet","Connexion stable"],
+["Teams","Connexion, appel audio/vidéo, partage d'écran","Fonctionne, casque détecté"],
+["Chrome","Navigation, lecture vidéo, téléchargement","Aucun plantage"],
+["LibreOffice","Ouvrir, modifier, enregistrer .docx/.xlsx/.odt, export PDF","Fichiers intacts"],
+["Discord","Connexion, vocal, micro et casque Jabra","Son entrant et sortant OK"],
+["Jabra Evolve2 75","Reconnu, volume, micro, bouton mute","Fonctionnel"],
+["Clavier K860 / souris MX Vertical","Frappe, pointeur, boutons et molette","Réactifs"],
+["Affichage","Résolution, écran externe / dock","Correct"],
+["Impression","Page de test sur imprimante","Impression correcte"],
+["Gestionnaire de périphériques","Aucun point d'exclamation","Aucune anomalie"]];
+const $=id=>document.getElementById(id);
+const F=["client","testeur","date","poste","kb","pil","wsus","wsusdate","dec","obs"];
+let st={res:TESTS.map(()=>""),com:TESTS.map(()=>"")};
+const LBL={OK:"OK",KO:"KO",NA:"N/A","":"Non testé"};
+
+function load(){try{const s=JSON.parse(localStorage.getItem("cahier")||"null");if(s){st=s.st;F.forEach(f=>{if(s.f&&s.f[f]!=null)$(f).value=s.f[f]})}}catch(e){}}
+function save(){try{const f={};F.forEach(k=>f[k]=$(k).value);localStorage.setItem("cahier",JSON.stringify({st,f}))}catch(e){}}
+function render(){
+ $("tests").innerHTML=TESTS.map((t,i)=>`<div class="test"><div class="t">${i+1}. ${t[0]}<small>${t[1]} — attendu : ${t[2]}</small></div>
+ <div class="row"><select data-i="${i}" class="${st.res[i]}"><option value="">Non testé</option><option value="OK">OK</option><option value="KO">KO</option><option value="NA">N/A</option></select>
+ <textarea data-c="${i}" rows="1" placeholder="Commentaire">${st.com[i]||""}</textarea></div></div>`).join("");
+ document.querySelectorAll("select[data-i]").forEach(s=>{s.value=st.res[s.dataset.i];s.onchange=()=>{st.res[s.dataset.i]=s.value;s.className=s.value;upd()}});
+ document.querySelectorAll("textarea[data-c]").forEach(a=>a.oninput=()=>{st.com[a.dataset.c]=a.value;save()});
+ upd();
+}
+function upd(){const c=k=>st.res.filter(r=>r===k).length;
+ $("sum").textContent=`OK ${c("OK")} · KO ${c("KO")} · N/A ${c("NA")} · Restants ${c("")}`;save()}
+F.forEach(f=>$(f).addEventListener("input",save));
+$("rst").onclick=()=>{if(confirm("Effacer toutes les réponses ?")){st={res:TESTS.map(()=>""),com:TESTS.map(()=>"")};F.forEach(f=>$(f).value=f==="client"?"FROGGY STYLE":"");$("date").value=new Date().toISOString().slice(0,10);render()}};
+
+$("pdf").onclick=async()=>{
+ const msg=$("msg");msg.textContent="";
+ if(!window.jspdf){msg.textContent="Bibliothèque PDF non chargée.";return}
+ const {jsPDF}=window.jspdf,d=new jsPDF(),v=id=>$(id).value||"—";
+ d.setFontSize(16);d.text("Rapport de tests de non-régression",14,18);
+ d.setFontSize(10);d.setTextColor(90);
+ d.text("Mises à jour KB Windows et pilotes – poste témoin Windows 11",14,25);d.setTextColor(0);
+ d.autoTable({startY:31,theme:"plain",styles:{fontSize:10,cellPadding:1},columnStyles:{0:{fontStyle:"bold",cellWidth:45}},
+  body:[["Client",v("client")],["Testeur",v("testeur")],["Date",v("date")],["Poste / modèle",v("poste")],["KB testée(s)",v("kb")],["Pilote(s) / version(s)",v("pil")],["Groupe WSUS ciblé",v("wsus")],["Approuvé sur WSUS le",v("wsusdate")]]});
+ d.autoTable({startY:d.lastAutoTable.finalY+6,head:[["N°","Application / fonction","Test","Résultat attendu","Résultat","Commentaire"]],
+  body:TESTS.map((t,i)=>[i+1,t[0],t[1],t[2],LBL[st.res[i]],st.com[i]||""]),
+  styles:{fontSize:8.5,cellPadding:2},headStyles:{fillColor:[47,111,237]},
+  columnStyles:{0:{cellWidth:9},4:{cellWidth:20,fontStyle:"bold"}},
+  didParseCell:h=>{if(h.section==="body"&&h.column.index===4){const x=h.cell.raw;h.cell.styles.textColor=x==="OK"?[26,143,76]:x==="KO"?[201,54,54]:[110,110,110]}}});
+ const c=k=>st.res.filter(r=>r===k).length;
+ let y=d.lastAutoTable.finalY+8;if(y>255){d.addPage();y=20}
+ d.setFontSize(11);d.setFont(undefined,"bold");d.text(`Synthèse : ${c("OK")} OK, ${c("KO")} KO, ${c("NA")} N/A, ${c("")} non testé(s)`,14,y);
+ d.text("Décision : "+($("dec").value||"non renseignée"),14,y+7);
+ d.setFont(undefined,"normal");d.setFontSize(10);
+ d.text(d.splitTextToSize("Observations : "+($("obs").value||"—"),180),14,y+15);
+ const name=`rapport_tests_${$("date").value||"sans-date"}.pdf`;
+ try{
+  let dl=null;
+  try{if(typeof claude!=="undefined"&&claude.use)dl=await claude.use("downloads")}catch(e){}
+  if(dl){await dl.save({filename:name,data:d.output("arraybuffer")});msg.textContent="Rapport enregistré.";}
+  else{
+   const url=URL.createObjectURL(d.output("blob")),a=document.createElement("a");
+   a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
+   setTimeout(()=>URL.revokeObjectURL(url),4000);
+   msg.textContent="Rapport généré : vérifiez votre dossier Téléchargements.";
+  }
+ }catch(e){msg.textContent=e&&e.code==="declined"?"Téléchargement annulé.":"Échec de l'enregistrement du PDF.";}
+};
+
+$("date").value=new Date().toISOString().slice(0,10);
+load();render();
+</script>
+</body>
+</html>
